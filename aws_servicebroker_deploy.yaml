@@ -1,0 +1,320 @@
+{
+    "kind": "List",
+    "apiVersion": "v1",
+    "metadata": {},
+    "items": [
+        {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+                "name": "aws-servicebroker-client"
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Secret",
+            "metadata": {
+                "annotations": {
+                    "kubernetes.io/service-account.name": "aws-servicebroker-client"
+                },
+                "name": "aws-servicebroker"
+            },
+            "type": "kubernetes.io/service-account-token"
+        },
+        {
+            "apiVersion": "servicecatalog.k8s.io/v1beta1",
+            "kind": "ClusterServiceBroker",
+            "metadata": {
+                "name": "aws-servicebroker"
+            },
+            "spec": {
+                "authInfo": {
+                    "bearer": {
+                        "secretRef": {
+                            "name": "aws-servicebroker",
+                            "namespace": "aws-sb"
+                        }
+                    }
+                },
+                "caBundle": "<CA>"
+                "url": "https://aws-servicebroker.aws-sb.svc.cluster.local"
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+                "name": "aws-servicebroker"
+            }
+        },
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1beta1",
+            "kind": "ClusterRole",
+            "metadata": {
+                "name": "aws-servicebroker"
+            },
+            "rules": [
+                {
+                    "apiGroups": [
+                        "authentication.k8s.io"
+                    ],
+                    "resources": [
+                        "tokenreviews"
+                    ],
+                    "verbs": [
+                        "create"
+                    ]
+                },
+                {
+                    "apiGroups": [
+                        "authorization.k8s.io"
+                    ],
+                    "resources": [
+                        "subjectaccessreviews"
+                    ],
+                    "verbs": [
+                        "create"
+                    ]
+                }
+            ]
+        },
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1beta1",
+            "kind": "ClusterRole",
+            "metadata": {
+                "name": "access-aws-servicebroker"
+            },
+            "rules": [
+                {
+                    "nonResourceURLs": [
+                        "/v2",
+                        "/v2/*"
+                    ],
+                    "verbs": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE"
+                    ]
+                }
+            ]
+        },
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1beta1",
+            "kind": "ClusterRoleBinding",
+            "metadata": {
+                "name": "aws-servicebroker"
+            },
+            "roleRef": {
+                "kind": "ClusterRole",
+                "name": "aws-servicebroker"
+            },
+            "subjects": [
+                {
+                    "kind": "ServiceAccount",
+                    "name": "aws-servicebroker",
+                    "namespace": "aws-sb"
+                }
+            ]
+        },
+        {
+            "apiVersion": "rbac.authorization.k8s.io/v1beta1",
+            "kind": "ClusterRoleBinding",
+            "metadata": {
+                "name": "aws-servicebroker-client"
+            },
+            "roleRef": {
+                "kind": "ClusterRole",
+                "name": "access-aws-servicebroker"
+            },
+            "subjects": [
+                {
+                    "kind": "ServiceAccount",
+                    "name": "aws-servicebroker-client",
+                    "namespace": "aws-sb"
+                }
+            ]
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "annotations": {
+                    "service.alpha.openshift.io/serving-cert-secret-name": "aws-servicebroker-ssl"
+                },
+                "labels": {
+                    "app": "aws-servicebroker"
+                },
+                "name": "aws-servicebroker"
+            },
+            "spec": {
+                "ports": [
+                    {
+                        "port": 443,
+                        "protocol": "TCP",
+                        "targetPort": 3199
+                    }
+                ],
+                "selector": {
+                    "app": "aws-servicebroker"
+                }
+            }
+        },
+        {
+            "apiVersion": "v1",
+            "data": {
+                "accesskeyid": "<echo -n ACCESSKEYID|base64>",
+                "secretkey": "<echo -n SECRETKEY|base64>"
+            },
+            "kind": "Secret",
+            "metadata": {
+                "name": "aws-servicebroker-credentials"
+            },
+            "type": "Opaque"
+        },
+        {
+            "apiVersion": "extensions/v1beta1",
+            "kind": "Deployment",
+            "metadata": {
+                "labels": {
+                    "app": "aws-servicebroker"
+                },
+                "name": "aws-servicebroker"
+            },
+            "spec": {
+                "replicas": 1,
+                "selector": {
+                    "matchLabels": {
+                        "app": "aws-servicebroker"
+                    }
+                },
+                "template": {
+                    "metadata": {
+                        "labels": {
+                            "app": "aws-servicebroker"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "args": [
+                                    "--logtostderr",
+                                    "--port=3199",
+                                    "--v=10",
+                                    "--region=ap-northeast-1",
+                                    "--s3Bucket=awsservicebroker",
+                                    "--s3Key=templates/latest",
+                                    "--s3Region=us-east-1",
+                                    "--tableName=awssb",
+                                    "--brokerId=awsservicebroker",
+                                    "--prescribeOverrides=true",
+                                    "--tls-cert-file=/var/run/aws-servicebroker/awssb.crt",
+                                    "--tls-private-key-file=/var/run/aws-servicebroker/awssb.key"
+                                ],
+                                "command": [
+                                    "/usr/local/bin/aws-servicebroker"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "AWS_ACCESS_KEY_ID",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "key": "accesskeyid",
+                                                "name": "aws-servicebroker-credentials"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "AWS_SECRET_ACCESS_KEY",
+                                        "valueFrom": {
+                                            "secretKeyRef": {
+                                                "key": "secretkey",
+                                                "name": "aws-servicebroker-credentials"
+                                            }
+                                        }
+                                    },
+                                    {
+                                        "name": "PARAM_OVERRIDE_awsservicebroker_all_all_all_region",
+                                        "value": "<REGION>"
+                                    },
+                                    {
+                                        "name": "PARAM_OVERRIDE_awsservicebroker_all_all_all_VpcId",
+                                        "value": "<YOUR VPCID TO DEPLOY SERVICEINSTANCE>"
+                                    },
+                                    {
+                                        "name": "PARAM_OVERRIDE_awsservicebroker_all_all_all_target_account_id",
+                                        "value": ""
+                                    },
+                                    {
+                                        "name": "PARAM_OVERRIDE_awsservicebroker_all_all_all_target_role_name",
+                                        "value": ""
+                                    }
+                                ],
+                                "image": "awsservicebroker/aws-servicebroker:beta",
+                                "imagePullPolicy": "Always",
+                                "livenessProbe": {
+                                    "failureThreshold": 3,
+                                    "httpGet": {
+                                        "path": "/healthz",
+                                        "port": 3199,
+                                        "scheme": "HTTPS"
+                                    },
+                                    "initialDelaySeconds": 30,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 5
+                                },
+                                "name": "service-aws-servicebroker",
+                                "ports": [
+                                    {
+                                        "containerPort": 3199
+                                    }
+                                ],
+                                "readinessProbe": {
+                                    "failureThreshold": 1,
+                                    "httpGet": {
+                                        "path": "/healthz",
+                                        "port": 3199,
+                                        "scheme": "HTTPS"
+                                    },
+                                    "initialDelaySeconds": 30,
+                                    "periodSeconds": 5,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 5
+                                },
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/var/run/aws-servicebroker",
+                                        "name": "aws-servicebroker-ssl",
+                                        "readOnly": true
+                                    }
+                                ]
+                            }
+                        ],
+                        "serviceAccount": "aws-servicebroker",
+                        "volumes": [
+                            {
+                                "name": "aws-servicebroker-ssl",
+                                "secret": {
+                                    "defaultMode": 420,
+                                    "items": [
+                                        {
+                                            "key": "tls.crt",
+                                            "path": "awssb.crt"
+                                        },
+                                        {
+                                            "key": "tls.key",
+                                            "path": "awssb.key"
+                                        }
+                                    ],
+                                    "secretName": "aws-servicebroker-ssl"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}

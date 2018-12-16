@@ -1,0 +1,10 @@
+apiVersion: servicecatalog.k8s.io/v1beta1
+kind: ServiceInstance
+metadata:
+  finalizers:
+  - kubernetes-incubator/service-catalog
+  name: s3-zw
+  namespace: zw-project
+spec:
+  clusterServiceClassExternalName: s3
+  clusterServicePlanExternalName: custom
